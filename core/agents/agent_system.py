@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from core.agents.multi_agent_reasoner import MultiAgentReasoner
 from core.event_bus import EventBus
@@ -29,8 +29,11 @@ class AgentSystem:
         self.event_bus.publish("agents.deliberated", deliberation)
 
         selected_plan = deliberation["selected_plan"]
+        prioritized_tasks = self._prioritize_tasks(analysis.get("generated_tasks", []))
+        primary_objective = prioritized_tasks[0]["objective"] if prioritized_tasks else analysis["goal"]
+
         generated_code = self.code_generation_engine.generate(
-            goal=analysis["goal"],
+            goal=primary_objective,
             context=analysis.get("context", {}),
             selected_plan=selected_plan,
             discussion=deliberation["discussion"],
@@ -42,14 +45,29 @@ class AgentSystem:
             "discussion": deliberation["discussion"],
             "scoreboard": deliberation["scoreboard"],
             "agent_plans": deliberation["agent_plans"],
+            "generated_tasks": prioritized_tasks,
             "tasks": [
                 {
                     "name": "execute-generated-python",
-                    "goal": analysis["goal"],
+                    "goal": primary_objective,
                     "evidence_count": len(analysis.get("memory_hits", [])),
+                    "task_value_score": prioritized_tasks[0]["value_score"] if prioritized_tasks else 0.0,
                     "code": generated_code,
                 }
             ],
         }
         self.event_bus.publish("arena.completed", plan)
         return plan
+
+    @staticmethod
+    def _prioritize_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        filtered = [
+            task
+            for task in tasks
+            if task.get("value_score", 0.0) >= 0.5 and task.get("automation_potential", 0.0) >= 0.45
+        ]
+        return sorted(
+            filtered,
+            key=lambda task: (task.get("value_score", 0.0), task.get("confidence", 0.0)),
+            reverse=True,
+        )

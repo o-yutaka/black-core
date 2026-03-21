@@ -25,9 +25,12 @@ class FakeMemory:
 def test_recommends_successful_strategy_and_records_memory():
     engine = TaskIntelligenceEngine(event_bus=EventBus(), memory=FakeMemory())
 
-    analysis = engine.analyze({"goal": "maximize reward", "context": {}})
+    analysis = engine.analyze({"goal": "maximize reward", "context": {"production": True, "latency_budget": 4}})
     assert analysis["recommended_strategy"] == "aggressive-profit"
     assert analysis["failed_strategies"] == ["safe-mode"]
+    assert analysis["generated_tasks"]
+    assert all(task["value_score"] >= 0.5 for task in analysis["generated_tasks"])
+    assert all(task["kind"] != "meta" for task in analysis["generated_tasks"])
 
     evaluation = engine.evaluate_and_remember(
         goal="maximize reward",
