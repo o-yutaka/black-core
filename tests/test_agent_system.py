@@ -11,6 +11,15 @@ def test_agent_system_runs_multi_agent_deliberation_and_generates_executable_cod
         "memory_hits": [],
         "top_strategies": [{"strategy": "deterministic-optimization", "win_rate": 0.8}],
         "failed_strategies": ["random-exploration"],
+        "generated_tasks": [
+            {
+                "name": "build-reliability-guardrails",
+                "objective": "Implement measurable guardrails that prevent regression and silent failures.",
+                "value_score": 0.88,
+                "automation_potential": 0.8,
+                "confidence": 0.78,
+            }
+        ],
     }
 
     plan = system.plan(analysis)
@@ -18,4 +27,6 @@ def test_agent_system_runs_multi_agent_deliberation_and_generates_executable_cod
     assert plan["winner_agent"] in {"logic_agent", "creative_agent", "critical_agent"}
     assert len(plan["agent_plans"]) == 3
     assert len(plan["discussion"]) == 3
+    assert plan["tasks"][0]["goal"] == "Implement measurable guardrails that prevent regression and silent failures."
+    assert plan["tasks"][0]["task_value_score"] == 0.88
     assert "print(json.dumps(result" in plan["tasks"][0]["code"]
