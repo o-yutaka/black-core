@@ -49,13 +49,25 @@ class TaskIntelligenceEngine:
         reward = float(result.get("reward", 0.0))
         importance = min(1.0, 0.4 + max(0.0, reward) * 0.3 + (0.3 if success else 0.0))
 
+        api_result = result.get("api_result")
+        memory_text = f"Goal={goal}; Action={action_name}; Summary={result.get('summary', '')}"
+        if isinstance(api_result, dict):
+            memory_text += (
+                f"; API={api_result.get('method', 'GET')} {api_result.get('url', '')}"
+                f"; Status={api_result.get('status_code', 0)}"
+            )
+
         stored = self.memory.save_memory(
-            text=f"Goal={goal}; Action={action_name}; Summary={result.get('summary', '')}",
+            text=memory_text,
             strategy=strategy,
             importance=importance,
             success=success,
             reward=reward,
-            context={"goal": goal, "action": {"name": action_name, "result": result}},
+            context={
+                "goal": goal,
+                "action": {"name": action_name, "result": result},
+                "api_result": api_result,
+            },
         )
 
         evaluation = {"success": success, "reward": reward, "stored_memory": stored}

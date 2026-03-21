@@ -3,6 +3,9 @@ from core.intelligence.task_intelligence_engine import TaskIntelligenceEngine
 
 
 class FakeMemory:
+    def __init__(self):
+        self.saved = None
+
     def search_memory(self, query: str, top_k: int = 5):
         return [
             {"strategy": "aggressive-profit", "success": True},
@@ -19,6 +22,7 @@ class FakeMemory:
         return [{"strategy": "aggressive-profit", "importance": 1.0}]
 
     def save_memory(self, **kwargs):
+        self.saved = kwargs
         return {"id": 1, **kwargs}
 
 
@@ -38,3 +42,28 @@ def test_recommends_successful_strategy_and_records_memory():
     assert evaluation["success"] is True
     assert evaluation["reward"] == 1.2
     assert evaluation["stored_memory"]["strategy"] == "aggressive-profit"
+
+
+def test_records_api_result_in_memory_context_and_summary():
+    memory = FakeMemory()
+    engine = TaskIntelligenceEngine(event_bus=EventBus(), memory=memory)
+
+    engine.evaluate_and_remember(
+        goal="load weather",
+        strategy="external-api",
+        action_name="execute-external-api",
+        result={
+            "success": True,
+            "reward": 1.0,
+            "summary": "api_call_succeeded",
+            "api_result": {
+                "method": "GET",
+                "url": "https://example.org/weather",
+                "status_code": 200,
+                "body": {"temp": 71},
+            },
+        },
+    )
+
+    assert "Status=200" in memory.saved["text"]
+    assert memory.saved["context"]["api_result"]["body"]["temp"] == 71
