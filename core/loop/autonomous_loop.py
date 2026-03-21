@@ -29,13 +29,20 @@ class AutonomousLoop:
 
     def run_once(self, state: Dict[str, Any]) -> Dict[str, Any]:
         snapshot = self.runtime_engine.tick(state)
-        goal_pack = self.goal_engine.generate(snapshot)  # ANALYSIS input
-        analysis = self.task_intelligence_engine.analyze(goal_pack)  # ANALYSIS
+        goal_pack = self.goal_engine.generate(snapshot)
+        analysis = self.task_intelligence_engine.analyze(goal_pack)
 
-        arena_plan = self.agent_system.plan(analysis)  # ARENA
-        self.event_bus.publish("evaluation.started", {"strategy": arena_plan["strategy"]})  # EVALUATION
+        arena_plan = self.agent_system.plan(analysis)
+        self.event_bus.publish(
+            "evaluation.started",
+            {
+                "strategy": arena_plan["strategy"],
+                "winner_agent": arena_plan.get("winner_agent"),
+                "discussion_points": sum(len(item.get("issues", [])) for item in arena_plan.get("discussion", [])),
+            },
+        )
 
-        action_result = self.executor_runner.run_plan(arena_plan)  # ACTION
+        action_result = self.executor_runner.run_plan(arena_plan)
         self.event_bus.publish("action.completed", {"plan": arena_plan, "result": action_result})
 
         evaluation = self.task_intelligence_engine.evaluate_and_remember(
@@ -43,14 +50,15 @@ class AutonomousLoop:
             strategy=arena_plan["strategy"],
             action_name=arena_plan["tasks"][0]["name"],
             result=action_result,
-        )  # MEMORY
+        )
 
         evolution = {
             "next_strategy_bias": analysis["top_strategies"][0]["strategy"] if analysis["top_strategies"] else arena_plan["strategy"],
             "confidence": analysis["top_strategies"][0]["win_rate"] if analysis["top_strategies"] else (0.7 if evaluation["success"] else 0.3),
+            "avoid_strategies": analysis.get("failed_strategies", []),
         }
-        self.event_bus.publish("evolution.completed", evolution)  # EVOLUTION
-        self.event_bus.publish("design.completed", {"next_strategy": evolution["next_strategy_bias"]})  # DESIGN
+        self.event_bus.publish("evolution.completed", evolution)
+        self.event_bus.publish("design.completed", {"next_strategy": evolution["next_strategy_bias"]})
 
         summary = {
             "snapshot": snapshot,
@@ -61,5 +69,5 @@ class AutonomousLoop:
             "evaluation": evaluation,
             "evolution": evolution,
         }
-        self.event_bus.publish("loop.completed", summary)  # LOOP
+        self.event_bus.publish("loop.completed", summary)
         return summary

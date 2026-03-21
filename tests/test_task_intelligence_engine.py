@@ -12,6 +12,12 @@ class FakeMemory:
     def top_strategies(self, top_k: int = 3):
         return [{"strategy": "aggressive-profit", "win_rate": 0.9}]
 
+    def failed_strategies(self, top_k: int = 5):
+        return ["safe-mode"]
+
+    def best_practices(self, top_k: int = 3):
+        return [{"strategy": "aggressive-profit", "importance": 1.0}]
+
     def save_memory(self, **kwargs):
         return {"id": 1, **kwargs}
 
@@ -21,6 +27,7 @@ def test_recommends_successful_strategy_and_records_memory():
 
     analysis = engine.analyze({"goal": "maximize reward", "context": {}})
     assert analysis["recommended_strategy"] == "aggressive-profit"
+    assert analysis["failed_strategies"] == ["safe-mode"]
 
     evaluation = engine.evaluate_and_remember(
         goal="maximize reward",
