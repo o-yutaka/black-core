@@ -29,12 +29,7 @@ class AgentSystem:
         self.event_bus.publish("agents.deliberated", deliberation)
 
         selected_plan = deliberation["selected_plan"]
-        generated_code = self.code_generation_engine.generate(
-            goal=analysis["goal"],
-            context=analysis.get("context", {}),
-            selected_plan=selected_plan,
-            discussion=deliberation["discussion"],
-        )
+        task = self._build_task(analysis=analysis, selected_plan=selected_plan, deliberation=deliberation)
 
         plan = {
             "strategy": selected_plan["strategy"],
@@ -42,14 +37,40 @@ class AgentSystem:
             "discussion": deliberation["discussion"],
             "scoreboard": deliberation["scoreboard"],
             "agent_plans": deliberation["agent_plans"],
-            "tasks": [
-                {
-                    "name": "execute-generated-python",
-                    "goal": analysis["goal"],
-                    "evidence_count": len(analysis.get("memory_hits", [])),
-                    "code": generated_code,
-                }
-            ],
+            "tasks": [task],
         }
         self.event_bus.publish("arena.completed", plan)
         return plan
+
+    def _build_task(self, analysis: Dict[str, Any], selected_plan: Dict[str, Any], deliberation: Dict[str, Any]) -> Dict[str, Any]:
+        context = analysis.get("context", {})
+        api_request = context.get("api_request")
+        if isinstance(api_request, dict) and api_request.get("url"):
+            return {
+                "type": "api",
+                "name": "execute-external-api",
+                "goal": analysis["goal"],
+                "evidence_count": len(analysis.get("memory_hits", [])),
+                "method": api_request.get("method", "GET"),
+                "url": api_request["url"],
+                "query": api_request.get("query", {}),
+                "headers": api_request.get("headers", {}),
+                "body": api_request.get("body"),
+                "timeout_seconds": api_request.get("timeout_seconds", 8),
+                "plan_algorithm": selected_plan.get("algorithm", ""),
+                "deliberation_points": sum(len(item.get("issues", [])) for item in deliberation.get("discussion", [])),
+            }
+
+        generated_code = self.code_generation_engine.generate(
+            goal=analysis["goal"],
+            context=context,
+            selected_plan=selected_plan,
+            discussion=deliberation["discussion"],
+        )
+        return {
+            "type": "code",
+            "name": "execute-generated-python",
+            "goal": analysis["goal"],
+            "evidence_count": len(analysis.get("memory_hits", [])),
+            "code": generated_code,
+        }
