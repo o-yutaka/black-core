@@ -18,6 +18,7 @@ def test_agent_system_runs_multi_agent_deliberation_and_generates_executable_cod
                 "value_score": 0.88,
                 "automation_potential": 0.8,
                 "confidence": 0.78,
+                "final_score": 0.86,
             }
         ],
     }

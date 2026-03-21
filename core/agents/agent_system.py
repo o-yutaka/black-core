@@ -68,6 +68,6 @@ class AgentSystem:
         ]
         return sorted(
             filtered,
-            key=lambda task: (task.get("value_score", 0.0), task.get("confidence", 0.0)),
+            key=lambda task: (task.get("final_score", task.get("value_score", 0.0)), task.get("confidence", 0.0)),
             reverse=True,
         )

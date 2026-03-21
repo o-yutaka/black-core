@@ -21,22 +21,22 @@ class TaskIntelligenceEngine:
         top_strategies = self.memory.top_strategies(top_k=5)
         failed_strategies = self.memory.failed_strategies(top_k=5)
         best_practices = self.memory.best_practices(top_k=3)
+        strategy_health = self._build_strategy_health(memory_hits, top_strategies, failed_strategies)
 
         recommended_strategy = (
-            top_strategies[0]["strategy"]
-            if top_strategies
+            strategy_health[0]["strategy"]
+            if strategy_health
             else (memory_hits[0]["strategy"] if memory_hits else "balanced-execution")
         )
 
         generated_tasks = self._generate_high_value_tasks(
             goal=goal,
             context=context,
-            top_strategies=top_strategies,
-            failed_strategies=failed_strategies,
+            strategy_health=strategy_health,
             best_practices=best_practices,
             memory_hits=memory_hits,
         )
-        self.event_bus.publish("tasks.generated", {"goal": goal, "tasks": generated_tasks})
+        self.event_bus.publish("tasks.generated", {"goal": goal, "tasks": generated_tasks, "strategy_health": strategy_health})
 
         analysis = {
             "goal": goal,
@@ -45,6 +45,7 @@ class TaskIntelligenceEngine:
             "top_strategies": top_strategies,
             "failed_strategies": failed_strategies,
             "best_practices": best_practices,
+            "strategy_health": strategy_health,
             "recommended_strategy": recommended_strategy,
             "generated_tasks": generated_tasks,
         }
@@ -80,12 +81,13 @@ class TaskIntelligenceEngine:
         self,
         goal: str,
         context: Dict[str, Any],
-        top_strategies: List[Dict[str, Any]],
-        failed_strategies: List[str],
+        strategy_health: List[Dict[str, Any]],
         best_practices: List[Dict[str, Any]],
         memory_hits: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        strategy = top_strategies[0]["strategy"] if top_strategies else "balanced-execution"
+        strategy = strategy_health[0]["strategy"] if strategy_health else "balanced-execution"
+        strategy_success_rate = strategy_health[0]["success_rate"] if strategy_health else 0.65
+        strategy_threshold = 0.55
 
         candidate_tasks = [
             {
@@ -93,8 +95,9 @@ class TaskIntelligenceEngine:
                 "objective": f"Automate the highest-impact workflow supporting goal: {goal}",
                 "impact": self._estimate_impact(context, boost=0.2),
                 "automation_potential": self._estimate_automation(context, boost=0.25),
-                "feasibility": self._estimate_feasibility(context, failed_strategies, penalty=0.05),
+                "feasibility": self._estimate_feasibility(context, strategy_success_rate, penalty=0.05),
                 "strategy": strategy,
+                "strategy_success_rate": strategy_success_rate,
                 "reason": "Direct automation produces persistent ROI and reduces repeat manual work.",
                 "kind": "execution",
             },
@@ -103,8 +106,9 @@ class TaskIntelligenceEngine:
                 "objective": "Implement measurable guardrails that prevent regression and silent failures.",
                 "impact": self._estimate_impact(context, boost=0.15),
                 "automation_potential": self._estimate_automation(context, boost=0.2),
-                "feasibility": self._estimate_feasibility(context, failed_strategies, penalty=0.0),
+                "feasibility": self._estimate_feasibility(context, strategy_success_rate, penalty=0.0),
                 "strategy": strategy,
+                "strategy_success_rate": strategy_success_rate,
                 "reason": "Reliability guardrails create compounding value across every future task run.",
                 "kind": "execution",
             },
@@ -115,6 +119,7 @@ class TaskIntelligenceEngine:
                 "automation_potential": 0.1,
                 "feasibility": 0.95,
                 "strategy": "documentation-only",
+                "strategy_success_rate": 0.3,
                 "reason": "Low-value passive output candidate used for filtering quality control.",
                 "kind": "meta",
             },
@@ -123,8 +128,9 @@ class TaskIntelligenceEngine:
                 "objective": "Fill memory gaps by adding evaluation probes for unknown high-risk areas.",
                 "impact": self._estimate_impact(context, boost=0.1),
                 "automation_potential": self._estimate_automation(context, boost=0.15),
-                "feasibility": self._estimate_feasibility(context, failed_strategies, penalty=0.1),
+                "feasibility": self._estimate_feasibility(context, strategy_success_rate, penalty=0.1),
                 "strategy": strategy,
+                "strategy_success_rate": strategy_success_rate,
                 "reason": "Targeted probes improve downstream decision quality and reduce uncertainty.",
                 "kind": "learning",
             },
@@ -143,6 +149,10 @@ class TaskIntelligenceEngine:
                 memory_hits=memory_hits,
                 best_practices=best_practices,
             )
+            candidate["final_score"] = round(
+                (candidate["value_score"] * 0.75) + (candidate["strategy_success_rate"] * 0.25),
+                4,
+            )
 
         filtered = [
             task
@@ -150,14 +160,58 @@ class TaskIntelligenceEngine:
             if task["value_score"] >= 0.5
             and task["automation_potential"] >= 0.45
             and task["kind"] != "meta"
-            and task["strategy"] not in failed_strategies
+            and task["strategy_success_rate"] >= strategy_threshold
         ]
 
         filtered.sort(
-            key=lambda task: (task["value_score"], task["confidence"], task["impact"]),
+            key=lambda task: (task["final_score"], task["confidence"], task["impact"]),
             reverse=True,
         )
         return filtered[:3]
+
+    @staticmethod
+    def _build_strategy_health(
+        memory_hits: List[Dict[str, Any]],
+        top_strategies: List[Dict[str, Any]],
+        failed_strategies: List[str],
+    ) -> List[Dict[str, Any]]:
+        grouped: Dict[str, Dict[str, float]] = {}
+        for hit in memory_hits:
+            strategy = str(hit.get("strategy", "balanced-execution"))
+            record = grouped.setdefault(strategy, {"wins": 0.0, "total": 0.0, "prior": 0.0})
+            record["total"] += 1.0
+            if bool(hit.get("success", False)):
+                record["wins"] += 1.0
+
+        for item in top_strategies:
+            strategy = str(item.get("strategy", "balanced-execution"))
+            record = grouped.setdefault(strategy, {"wins": 0.0, "total": 0.0, "prior": 0.0})
+            record["prior"] = float(item.get("win_rate", 0.0))
+
+        insights: List[Dict[str, Any]] = []
+        for strategy, metrics in grouped.items():
+            total = metrics["total"]
+            observed_rate = (metrics["wins"] / total) if total > 0 else 0.0
+            has_observations = total > 0
+            prior_rate = metrics["prior"]
+            # Blend observed outcomes with prior topline win rate.
+            success_rate = (observed_rate * 0.75 + prior_rate * 0.25) if has_observations else max(prior_rate, 0.5)
+            failure_flag_penalty = 0.05 if strategy in failed_strategies else 0.0
+            adjusted_rate = max(0.0, min(1.0, success_rate - failure_flag_penalty))
+            insights.append(
+                {
+                    "strategy": strategy,
+                    "success_rate": round(adjusted_rate, 4),
+                    "observations": int(total),
+                    "failed_flag": strategy in failed_strategies,
+                }
+            )
+
+        if not insights:
+            insights = [{"strategy": "balanced-execution", "success_rate": 0.65, "observations": 0, "failed_flag": False}]
+
+        insights.sort(key=lambda item: (item["success_rate"], item["observations"]), reverse=True)
+        return insights
 
     @staticmethod
     def _estimate_impact(context: Dict[str, Any], boost: float = 0.0) -> float:
@@ -173,11 +227,11 @@ class TaskIntelligenceEngine:
         return round(min(1.0, baseline + boost), 4)
 
     @staticmethod
-    def _estimate_feasibility(context: Dict[str, Any], failed_strategies: List[str], penalty: float = 0.0) -> float:
+    def _estimate_feasibility(context: Dict[str, Any], strategy_success_rate: float, penalty: float = 0.0) -> float:
         complexity_penalty = min(0.25, 0.03 * len(context))
-        historical_penalty = min(0.2, 0.04 * len(failed_strategies))
-        score = 0.85 - complexity_penalty - historical_penalty - penalty
-        return round(max(0.2, score), 4)
+        strategy_bonus = min(0.15, max(0.0, strategy_success_rate - 0.5) * 0.3)
+        score = 0.7 - complexity_penalty + strategy_bonus - penalty
+        return round(max(0.2, min(0.98, score)), 4)
 
     @staticmethod
     def _confidence_from_memory(
