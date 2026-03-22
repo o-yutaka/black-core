@@ -44,6 +44,21 @@ class AgentSystem:
 
     def _build_task(self, analysis: Dict[str, Any], selected_plan: Dict[str, Any], deliberation: Dict[str, Any]) -> Dict[str, Any]:
         context = analysis.get("context", {})
+        sns_request = context.get("sns_request")
+        if isinstance(sns_request, dict) and str(sns_request.get("platform", "")).lower() == "x":
+            return {
+                "type": "sns_x",
+                "name": "execute-x-operation",
+                "goal": analysis["goal"],
+                "operation": sns_request.get("operation", "post_and_fetch_metrics"),
+                "text": sns_request.get("text", ""),
+                "tweet_id": sns_request.get("tweet_id", ""),
+                "reply_settings": sns_request.get("reply_settings"),
+                "simulation_metrics": sns_request.get("simulation_metrics", {}),
+                "plan_algorithm": selected_plan.get("algorithm", ""),
+                "deliberation_points": sum(len(item.get("issues", [])) for item in deliberation.get("discussion", [])),
+            }
+
         api_request = context.get("api_request")
         if isinstance(api_request, dict) and api_request.get("url"):
             return {

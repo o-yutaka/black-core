@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from core.event_bus import EventBus
 
@@ -44,18 +44,27 @@ class TaskIntelligenceEngine:
         strategy: str,
         action_name: str,
         result: Dict[str, Any],
+        performance: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         success = bool(result.get("success", False))
         reward = float(result.get("reward", 0.0))
         importance = min(1.0, 0.4 + max(0.0, reward) * 0.3 + (0.3 if success else 0.0))
 
         api_result = result.get("api_result")
+        x_result = result.get("x_result")
         memory_text = f"Goal={goal}; Action={action_name}; Summary={result.get('summary', '')}"
         if isinstance(api_result, dict):
             memory_text += (
                 f"; API={api_result.get('method', 'GET')} {api_result.get('url', '')}"
                 f"; Status={api_result.get('status_code', 0)}"
             )
+        if isinstance(x_result, dict):
+            post_data = x_result.get("post", {}).get("data", {}).get("data", {})
+            metrics = x_result.get("metrics", {}).get("data", {}).get("data", {}).get("public_metrics", {})
+            memory_text += f"; XTweetID={post_data.get('id', '')}; XLikes={metrics.get('like_count', 0)}"
+        if performance:
+            gap = performance.get("gap", {})
+            memory_text += f"; PerfDelta={gap.get('delta', 0.0)}; PerfRatio={gap.get('ratio', 0.0)}"
 
         stored = self.memory.save_memory(
             text=memory_text,
@@ -67,10 +76,12 @@ class TaskIntelligenceEngine:
                 "goal": goal,
                 "action": {"name": action_name, "result": result},
                 "api_result": api_result,
+                "x_result": x_result,
+                "performance": performance,
             },
         )
 
-        evaluation = {"success": success, "reward": reward, "stored_memory": stored}
+        evaluation = {"success": success, "reward": reward, "stored_memory": stored, "performance": performance}
         self.event_bus.publish("evaluation.completed", evaluation)
         self.event_bus.publish("memory.recorded", stored)
         return evaluation
