@@ -19,6 +19,7 @@ def test_agent_system_runs_multi_agent_deliberation_and_generates_executable_cod
     assert len(plan["agent_plans"]) == 3
     assert len(plan["discussion"]) == 3
     assert plan["tasks"][0]["type"] == "code"
+    assert plan["tasks"][0]["profit_priority"] >= 0.6
     assert "print(json.dumps(result" in plan["tasks"][0]["code"]
 
 
@@ -44,6 +45,6 @@ def test_agent_system_builds_api_task_when_context_requests_external_call():
     task = plan["tasks"][0]
 
     assert task["type"] == "api"
-    assert task["name"] == "execute-external-api"
+    assert task["name"] == "execute-revenue-api"
     assert task["url"] == "https://example.org/weather"
     assert task["query"]["city"] == "NewYork"
