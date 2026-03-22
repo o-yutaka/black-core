@@ -67,3 +67,33 @@ def test_records_api_result_in_memory_context_and_summary():
 
     assert "Status=200" in memory.saved["text"]
     assert memory.saved["context"]["api_result"]["body"]["temp"] == 71
+
+
+def test_records_x_and_performance_data_in_memory_context():
+    memory = FakeMemory()
+    engine = TaskIntelligenceEngine(event_bus=EventBus(), memory=memory)
+
+    engine.evaluate_and_remember(
+        goal="grow social engagement",
+        strategy="social-scale",
+        action_name="execute-x-operation",
+        result={
+            "success": True,
+            "reward": 1.1,
+            "summary": "x_posted_and_measured",
+            "x_result": {
+                "post": {"data": {"data": {"id": "991"}}},
+                "metrics": {
+                    "data": {
+                        "data": {
+                            "public_metrics": {"like_count": 41}
+                        }
+                    }
+                },
+            },
+        },
+        performance={"gap": {"delta": -4.0, "ratio": 0.8}},
+    )
+
+    assert "XTweetID=991" in memory.saved["text"]
+    assert memory.saved["context"]["performance"]["gap"]["ratio"] == 0.8
