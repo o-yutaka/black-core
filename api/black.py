@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from core.agents.agent_system import AgentSystem
+from core.autonomy.data_ingestion_engine import DataIngestionEngine
+from core.autonomy.monetization_strategy_engine import MonetizationStrategyEngine
+from core.autonomy.output_channel_engine import OutputChannelEngine
+from core.autonomy.persistent_scheduler import PersistentScheduler
 from core.event_bus import EventBus
 from core.intelligence.goal_generation_engine import GoalGenerationEngine
 from core.intelligence.task_intelligence_engine import TaskIntelligenceEngine
@@ -18,6 +22,12 @@ def build_black_origin(memory_dir: str = ".black_memory"):
     goal_engine = GoalGenerationEngine(event_bus=event_bus)
     agent_system = AgentSystem(event_bus=event_bus)
     executor_runner = ExecutorRunner(event_bus=event_bus)
+
+    data_ingestion_engine = DataIngestionEngine(event_bus=event_bus)
+    monetization_strategy_engine = MonetizationStrategyEngine(event_bus=event_bus)
+    persistent_scheduler = PersistentScheduler(event_bus=event_bus, db_path=f"{memory_dir}/scheduler.db")
+    output_channel_engine = OutputChannelEngine(event_bus=event_bus, output_file=f"{memory_dir}/autonomy_feed.jsonl")
+
     autonomous_loop = AutonomousLoop(
         runtime_engine=runtime_engine,
         goal_engine=goal_engine,
@@ -25,6 +35,10 @@ def build_black_origin(memory_dir: str = ".black_memory"):
         agent_system=agent_system,
         executor_runner=executor_runner,
         event_bus=event_bus,
+        data_ingestion_engine=data_ingestion_engine,
+        monetization_strategy_engine=monetization_strategy_engine,
+        persistent_scheduler=persistent_scheduler,
+        output_channel_engine=output_channel_engine,
     )
 
     return {
@@ -35,5 +49,9 @@ def build_black_origin(memory_dir: str = ".black_memory"):
         "goal_engine": goal_engine,
         "agent_system": agent_system,
         "executor_runner": executor_runner,
+        "data_ingestion_engine": data_ingestion_engine,
+        "monetization_strategy_engine": monetization_strategy_engine,
+        "persistent_scheduler": persistent_scheduler,
+        "output_channel_engine": output_channel_engine,
         "autonomous_loop": autonomous_loop,
     }
