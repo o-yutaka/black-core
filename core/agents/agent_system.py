@@ -67,10 +67,18 @@ class AgentSystem:
             selected_plan=selected_plan,
             discussion=deliberation["discussion"],
         )
+        cloud_execution = context.get("cloud_execution") if isinstance(context.get("cloud_execution"), dict) else None
         return {
             "type": "code",
             "name": "execute-generated-python",
             "goal": analysis["goal"],
             "evidence_count": len(analysis.get("memory_hits", [])),
             "code": generated_code,
+            "context": context,
+            "selected_plan": selected_plan,
+            "discussion": deliberation["discussion"],
+            "max_iterations": int(context.get("max_code_iterations", 2)),
+            "execution_target": "cloud" if cloud_execution else "local",
+            "cloud_execution": cloud_execution,
+            "plan_strategy": selected_plan.get("strategy"),
         }
