@@ -5,6 +5,7 @@ from typing import Any, Dict
 from core.event_bus import EventBus
 from executor.api_executor import APIExecutionError, APIExecutor
 from executor.code_runner import CodeRunner, CodeSafetyError
+from executor.sns_executor import SNSExecutor
 
 
 class ExecutorRunner:
@@ -14,6 +15,7 @@ class ExecutorRunner:
         self.event_bus = event_bus
         self.code_runner = CodeRunner(timeout_seconds=timeout_seconds)
         self.api_executor = APIExecutor()
+        self.sns_executor = SNSExecutor()
 
     def run_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
         task = plan["tasks"][0]
@@ -21,6 +23,8 @@ class ExecutorRunner:
 
         if task_type == "api":
             result = self._run_api_task(task)
+        elif task_type == "sns_campaign":
+            result = self._run_sns_task(task)
         else:
             result = self._run_code_task(task)
 
@@ -80,4 +84,10 @@ class ExecutorRunner:
             }
 
         self.event_bus.publish("api.execution.completed", {"task": task, "result": result})
+        return result
+
+    def _run_sns_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        self.event_bus.publish("sns.execution.started", {"task": task})
+        result = self.sns_executor.execute_campaign(task)
+        self.event_bus.publish("sns.execution.completed", {"task": task, "result": result})
         return result

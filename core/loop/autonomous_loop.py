@@ -7,6 +7,7 @@ from core.event_bus import EventBus
 from core.intelligence.goal_generation_engine import GoalGenerationEngine
 from core.intelligence.task_intelligence_engine import TaskIntelligenceEngine
 from core.runtime_engine import RuntimeEngine
+from core.sns.monetization_engine import SNSMonetizationEngine
 from executor.runner import ExecutorRunner
 
 
@@ -19,6 +20,7 @@ class AutonomousLoop:
         agent_system: AgentSystem,
         executor_runner: ExecutorRunner,
         event_bus: EventBus,
+        sns_monetization_engine: SNSMonetizationEngine,
     ) -> None:
         self.runtime_engine = runtime_engine
         self.goal_engine = goal_engine
@@ -26,11 +28,16 @@ class AutonomousLoop:
         self.agent_system = agent_system
         self.executor_runner = executor_runner
         self.event_bus = event_bus
+        self.sns_monetization_engine = sns_monetization_engine
 
     def run_once(self, state: Dict[str, Any]) -> Dict[str, Any]:
         snapshot = self.runtime_engine.tick(state)
         goal_pack = self.goal_engine.generate(snapshot)
         analysis = self.task_intelligence_engine.analyze(goal_pack)
+
+        campaign = self.sns_monetization_engine.build_campaign(goal=goal_pack["goal"], context=analysis.get("context", {}))
+        if campaign.get("posts"):
+            analysis["context"] = {**analysis.get("context", {}), "sns_campaign": campaign}
 
         arena_plan = self.agent_system.plan(analysis)
         self.event_bus.publish(
@@ -64,6 +71,7 @@ class AutonomousLoop:
             "snapshot": snapshot,
             "goal_pack": goal_pack,
             "analysis": analysis,
+            "sns_campaign": campaign,
             "arena_plan": arena_plan,
             "action_result": action_result,
             "evaluation": evaluation,
