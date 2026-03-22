@@ -15,7 +15,10 @@ class TaskIntelligenceEngine:
 
     def analyze(self, goal_pack: Dict[str, Any]) -> Dict[str, Any]:
         goal = goal_pack["goal"]
+        knowledge = goal_pack.get("knowledge", {})
         memory_hits = self.memory.search_memory(goal, top_k=7)
+        local_documents = knowledge.get("local_documents", []) if isinstance(knowledge, dict) else []
+        api_hits = knowledge.get("api_hits", []) if isinstance(knowledge, dict) else []
         top_strategies = self.memory.top_strategies(top_k=5)
         failed_strategies = self.memory.failed_strategies(top_k=5)
         best_practices = self.memory.best_practices(top_k=3)
@@ -25,6 +28,10 @@ class TaskIntelligenceEngine:
             if top_strategies
             else (memory_hits[0]["strategy"] if memory_hits else "balanced-execution")
         )
+        if api_hits and not top_strategies:
+            recommended_strategy = "external-api"
+        if local_documents and not api_hits and not top_strategies:
+            recommended_strategy = "knowledge-grounded"
 
         analysis = {
             "goal": goal,
@@ -33,6 +40,8 @@ class TaskIntelligenceEngine:
             "top_strategies": top_strategies,
             "failed_strategies": failed_strategies,
             "best_practices": best_practices,
+            "api_hits": api_hits,
+            "local_documents": local_documents,
             "recommended_strategy": recommended_strategy,
         }
         self.event_bus.publish("analysis.completed", analysis)

@@ -67,3 +67,28 @@ def test_records_api_result_in_memory_context_and_summary():
 
     assert "Status=200" in memory.saved["text"]
     assert memory.saved["context"]["api_result"]["body"]["temp"] == 71
+
+
+def test_prefers_external_api_strategy_when_knowledge_router_has_api_hits_and_no_history():
+    class EmptyMemory(FakeMemory):
+        def search_memory(self, query: str, top_k: int = 5):
+            return []
+
+        def top_strategies(self, top_k: int = 3):
+            return []
+
+    engine = TaskIntelligenceEngine(event_bus=EventBus(), memory=EmptyMemory())
+
+    analysis = engine.analyze(
+        {
+            "goal": "fetch weather",
+            "context": {},
+            "knowledge": {
+                "api_hits": [{"request": {"url": "https://example.org/weather"}}],
+                "local_documents": [],
+            },
+        }
+    )
+
+    assert analysis["recommended_strategy"] == "external-api"
+    assert len(analysis["api_hits"]) == 1
