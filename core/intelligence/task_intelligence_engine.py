@@ -47,6 +47,9 @@ class TaskIntelligenceEngine:
     ) -> Dict[str, Any]:
         success = bool(result.get("success", False))
         reward = float(result.get("reward", 0.0))
+        engagement = result.get("engagement") if isinstance(result.get("engagement"), dict) else {}
+        if reward == 0.0 and engagement:
+            reward = float(engagement.get("revenue", 0.0)) / 100.0
         importance = min(1.0, 0.4 + max(0.0, reward) * 0.3 + (0.3 if success else 0.0))
 
         api_result = result.get("api_result")
@@ -55,6 +58,14 @@ class TaskIntelligenceEngine:
             memory_text += (
                 f"; API={api_result.get('method', 'GET')} {api_result.get('url', '')}"
                 f"; Status={api_result.get('status_code', 0)}"
+            )
+
+        if engagement:
+            aggregate = engagement.get("aggregate", {})
+            memory_text += (
+                f"; EngagementRate={aggregate.get('engagement_rate', 0.0):.4f}"
+                f"; ConversionRate={aggregate.get('conversion_rate', 0.0):.4f}"
+                f"; Revenue={engagement.get('revenue', 0.0):.2f}"
             )
 
         stored = self.memory.save_memory(
@@ -67,6 +78,7 @@ class TaskIntelligenceEngine:
                 "goal": goal,
                 "action": {"name": action_name, "result": result},
                 "api_result": api_result,
+                "engagement": engagement,
             },
         )
 

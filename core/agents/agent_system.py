@@ -44,6 +44,18 @@ class AgentSystem:
 
     def _build_task(self, analysis: Dict[str, Any], selected_plan: Dict[str, Any], deliberation: Dict[str, Any]) -> Dict[str, Any]:
         context = analysis.get("context", {})
+        sns_campaign = context.get("sns_campaign")
+        if isinstance(sns_campaign, dict) and sns_campaign.get("posts"):
+            return {
+                "type": "sns_campaign",
+                "name": "execute-sns-monetization",
+                "goal": analysis["goal"],
+                "campaign_name": sns_campaign.get("campaign_name", "black-origin-sns"),
+                "posts": sns_campaign.get("posts", []),
+                "signal_count": len(sns_campaign.get("signals", [])),
+                "plan_algorithm": selected_plan.get("algorithm", ""),
+            }
+
         api_request = context.get("api_request")
         if isinstance(api_request, dict) and api_request.get("url"):
             return {

@@ -7,6 +7,7 @@ from core.intelligence.task_intelligence_engine import TaskIntelligenceEngine
 from core.loop.autonomous_loop import AutonomousLoop
 from core.memory.faiss_memory import FaissMemory
 from core.runtime_engine import RuntimeEngine
+from core.sns.monetization_engine import SNSMonetizationEngine
 from executor.runner import ExecutorRunner
 
 
@@ -18,6 +19,7 @@ def build_black_origin(memory_dir: str = ".black_memory"):
     goal_engine = GoalGenerationEngine(event_bus=event_bus)
     agent_system = AgentSystem(event_bus=event_bus)
     executor_runner = ExecutorRunner(event_bus=event_bus)
+    sns_monetization_engine = SNSMonetizationEngine(event_bus=event_bus)
     autonomous_loop = AutonomousLoop(
         runtime_engine=runtime_engine,
         goal_engine=goal_engine,
@@ -25,6 +27,7 @@ def build_black_origin(memory_dir: str = ".black_memory"):
         agent_system=agent_system,
         executor_runner=executor_runner,
         event_bus=event_bus,
+        sns_monetization_engine=sns_monetization_engine,
     )
 
     return {
@@ -35,5 +38,6 @@ def build_black_origin(memory_dir: str = ".black_memory"):
         "goal_engine": goal_engine,
         "agent_system": agent_system,
         "executor_runner": executor_runner,
+        "sns_monetization_engine": sns_monetization_engine,
         "autonomous_loop": autonomous_loop,
     }
