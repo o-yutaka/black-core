@@ -6,6 +6,8 @@ from core.agents.agent_system import AgentSystem
 from core.event_bus import EventBus
 from core.intelligence.goal_generation_engine import GoalGenerationEngine
 from core.intelligence.task_intelligence_engine import TaskIntelligenceEngine
+from core.knowledge.knowledge_router import KnowledgeRouter
+from core.memory.api_memory import APIMemoryStorage
 from core.runtime_engine import RuntimeEngine
 from executor.runner import ExecutorRunner
 
@@ -19,6 +21,8 @@ class AutonomousLoop:
         agent_system: AgentSystem,
         executor_runner: ExecutorRunner,
         event_bus: EventBus,
+        knowledge_router: KnowledgeRouter | None = None,
+        api_memory: APIMemoryStorage | None = None,
     ) -> None:
         self.runtime_engine = runtime_engine
         self.goal_engine = goal_engine
@@ -26,11 +30,15 @@ class AutonomousLoop:
         self.agent_system = agent_system
         self.executor_runner = executor_runner
         self.event_bus = event_bus
+        self.knowledge_router = knowledge_router
+        self.api_memory = api_memory
 
     def run_once(self, state: Dict[str, Any]) -> Dict[str, Any]:
         snapshot = self.runtime_engine.tick(state)
         goal_pack = self.goal_engine.generate(snapshot)
-        analysis = self.task_intelligence_engine.analyze(goal_pack)
+        knowledge_pack = self.knowledge_router.route(goal_pack) if self.knowledge_router else {}
+        goal_pack_with_knowledge = {**goal_pack, "knowledge": knowledge_pack}
+        analysis = self.task_intelligence_engine.analyze(goal_pack_with_knowledge)
 
         arena_plan = self.agent_system.plan(analysis)
         self.event_bus.publish(
@@ -44,6 +52,13 @@ class AutonomousLoop:
 
         action_result = self.executor_runner.run_plan(arena_plan)
         self.event_bus.publish("action.completed", {"plan": arena_plan, "result": action_result})
+
+        if self.api_memory is not None:
+            self.api_memory.store_from_action(
+                action_result=action_result,
+                goal=goal_pack["goal"],
+                action_name=arena_plan["tasks"][0]["name"],
+            )
 
         evaluation = self.task_intelligence_engine.evaluate_and_remember(
             goal=goal_pack["goal"],
@@ -63,6 +78,7 @@ class AutonomousLoop:
         summary = {
             "snapshot": snapshot,
             "goal_pack": goal_pack,
+            "knowledge_pack": knowledge_pack,
             "analysis": analysis,
             "arena_plan": arena_plan,
             "action_result": action_result,
