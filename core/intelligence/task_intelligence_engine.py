@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Dict
 
 from core.event_bus import EventBus
+from core.intelligence.monetization_scorer import MonetizationScorer
 
 if TYPE_CHECKING:
     from core.memory.faiss_memory import FaissMemory
@@ -12,6 +13,7 @@ class TaskIntelligenceEngine:
     def __init__(self, event_bus: EventBus, memory: "FaissMemory") -> None:
         self.event_bus = event_bus
         self.memory = memory
+        self.monetization_scorer = MonetizationScorer()
 
     def analyze(self, goal_pack: Dict[str, Any]) -> Dict[str, Any]:
         goal = goal_pack["goal"]
@@ -26,6 +28,12 @@ class TaskIntelligenceEngine:
             else (memory_hits[0]["strategy"] if memory_hits else "balanced-execution")
         )
 
+        monetization = self.monetization_scorer.score(
+            goal=goal,
+            context=goal_pack.get("context", {}),
+            best_practices=best_practices,
+        )
+
         analysis = {
             "goal": goal,
             "context": goal_pack.get("context", {}),
@@ -34,7 +42,9 @@ class TaskIntelligenceEngine:
             "failed_strategies": failed_strategies,
             "best_practices": best_practices,
             "recommended_strategy": recommended_strategy,
+            "monetization": monetization,
         }
+        self.event_bus.publish("monetization.scored", monetization)
         self.event_bus.publish("analysis.completed", analysis)
         return analysis
 
